@@ -3,8 +3,9 @@
 
 kubectl create namespace monitoring 
 
-#### clusterRole.yaml: 
+#### clusterRole.yaml:
 
+```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -39,12 +40,12 @@ subjects:
   name: default
   namespace: monitoring
 
-  
+```
 kubectl create -f clusterRole.yaml
 
 #### config-map.yaml: 
 
-
+```yaml 
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -182,13 +183,13 @@ data:
         - source_labels: [__meta_kubernetes_service_name]
           action: replace
           target_label: kubernetes_name
-
+```
           
 kubectl create -f config-map.yaml
 
-#### prometheus-deployment.yaml: 
+#### créer prometheus-deployment.yaml: 
 
-
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -236,12 +237,13 @@ spec:
         - name: prometheus-storage-volume
           emptyDir: {}
 
-kubectl create  -f prometheus-deployment.yaml 
+```
 
+kubectl create  -f prometheus-deployment.yaml 
 
 #### prometheus-service.yaml:
 
-
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -258,29 +260,31 @@ spec:
     - port: 8080
       targetPort: 9090 
       nodePort: 30000
+```
 
 kubectl create -f prometheus-service.yaml --namespace=monitoring
 
 ## 2. Setup Kube state metrics 
 
 git clone https://github.com/devopscube/kube-state-metrics-configs.git
+
 kubectl apply -f kube-state-metrics-configs/
 
 kubectl get deployments kube-state-metrics -n kube-system
 
 ### il faut ajouter ensuite : 
-
+```yaml
 - job_name: 'kube-state-metrics'
   static_configs:
     - targets: ['kube-state-metrics.kube-system.svc.cluster.local:8080']
-
+```
 
 ## 3. Set up grafana 
 
 git clone https://github.com/bibinwilson/kubernetes-grafana.git
 
 ### edit grafana-datasource-config.yaml
-
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -302,12 +306,11 @@ data:
             }
         ]
     }
-
+``` 
 kubectl create -f grafana-datasource-config.yaml 
 
 #### créer deployment.yaml:
-
-
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -350,12 +353,11 @@ spec:
           configMap:
               defaultMode: 420
               name: grafana-datasources
-
+```
 kubectl create -f deployment.yaml 
 
 #### créer service.yaml:
-
-
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -372,7 +374,7 @@ spec:
     - port: 3000
       targetPort: 3000
       nodePort: 32000
-
+```
 kubectl create -f service.yaml
 
 kubectl port-forward -n monitoring <grafana-pod-name> 3000 &
@@ -383,7 +385,7 @@ Pass: admin
 ## 4- install eslatic : 
 
 ### créer values.yaml 
-
+```yaml
 values.yaml :
 antiAffinity: "soft"
 esJavaOpts: "-Xmx128m -Xms128m"
@@ -410,7 +412,7 @@ esConfig:
         username: anonymous_user
         roles: superuser
         authz_exception: true
-
+```
 helm repo add elastic https://helm.elastic.co
 helm install elasticsearch elastic/elasticsearch -f values.yaml
 
@@ -418,21 +420,22 @@ helm install elasticsearch elastic/elasticsearch -f values.yaml
 clone https://github.com/prometheus-community/helm-charts/tree/main
 cd charts/prometheus-elasticsearch-exporter 
 
-### edit values.yaml : 
+### edit values.yaml :
+```yaml
 change sslSkipVerify to true 
 and uri:  <proto>://<user>:<password>@<host>:<port> 
 the user : elastic 
 the password: kubectl get secrets --namespace=default elasticsearch-master-credentials -ojsonpath='{.data.password}' | base64 -d
-
-### Now modify the cm of the prometheus to add : 
-
+```
+### maintenant on modifie le cm de prometheus qu'on va ajouter
+```yaml
 - job_name: elasticsearch
   static_configs:
   - targets: ['elasticsearch_exporter_machine_IP_address:9108']
-
+```
 
 ### ajouter les alerts dans le configmap de prometheus 
-
+```yaml
 - name: elasticsearch-alerts
   rules:
   - alert: ElasticsearchTooFewNodesRunning
@@ -515,9 +518,9 @@ the password: kubectl get secrets --namespace=default elasticsearch-master-crede
       summary: ES process CPU usage is high
     labels:
       severity: critical
-
+```
 #### maintenant on ajoute les recording rules : 
-
+```yaml
 groups:
 - name: elasticsearch_rules
   rules:
@@ -549,3 +552,4 @@ groups:
   - record: elasticsearch_heap_utilization_percentage
     expr: sum by (cluster, instance, name) (
       100 * (elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}))
+```
