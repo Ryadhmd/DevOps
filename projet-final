@@ -359,3 +359,54 @@ kubectl port-forward -n monitoring <grafana-pod-name> 3000 &
 
 User: admin
 Pass: admin
+
+4- install eslatic : 
+edit values.yaml 
+
+values.yaml :
+antiAffinity: "soft"
+
+esJavaOpts: "-Xmx128m -Xms128m"
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512M"
+  limits:
+    cpu: "1000m"
+    memory: "512M"
+
+volumeClaimTemplate:
+  accessModes: [ "ReadWriteOnce" ]
+  storageClassName: "standard"
+  resources:
+    requests:
+      storage: 100M
+
+esConfig:
+  elasticsearch.yml: |
+    xpack.security.http.ssl.enabled: false
+    xpack.security.authc:
+      anonymous:
+        username: anonymous_user
+        roles: superuser
+        authz_exception: true
+
+helm repo add elastic https://helm.elastic.co
+helm install elasticsearch elastic/elasticsearch -f values.yaml
+
+5- Install Elasticsearch exporter 
+clone https://github.com/prometheus-community/helm-charts/tree/main
+cd charts/prometheus-elasticsearch-exporter 
+
+edit values.yaml : 
+change sslSkipVerify to true 
+and uri:  <proto>://<user>:<password>@<host>:<port> 
+the user : elastic 
+the password: kubectl get secrets --namespace=default elasticsearch-master-credentials -ojsonpath='{.data.password}' | base64 -d
+
+Now modify the cm of the prometheus to add : 
+- job_name: elasticsearch
+  static_configs:
+  - targets: ['elasticsearch_exporter_machine_IP_address:9108']
+
