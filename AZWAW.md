@@ -1,5 +1,6 @@
 # Guide d'installation et de configuration pour un environnement de surveillance Kubernetes avec Prometheus, Grafana, Elasticsearch et Elasticsearch Exporter 
 ## 1. Install Prometheus 
+### créer un namespace :
 ```bash
 kubectl create namespace monitoring 
 ```
