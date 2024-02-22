@@ -1,9 +1,9 @@
-## Guide d'installation et de configuration pour un environnement de surveillance Kubernetes avec Prometheus, Grafana, Elasticsearch et Elasticsearch Exporter 
-1. Install Prometheus 
-
+# Guide d'installation et de configuration pour un environnement de surveillance Kubernetes avec Prometheus, Grafana, Elasticsearch et Elasticsearch Exporter 
+## 1. Install Prometheus 
+```bash
 kubectl create namespace monitoring 
-
-#### clusterRole.yaml:
+```
+#### créer clusterRole.yaml:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -41,8 +41,10 @@ subjects:
   namespace: monitoring
 
 ```
+### exécuter le
+```bash
 kubectl create -f clusterRole.yaml
-
+```
 #### config-map.yaml: 
 
 ```yaml 
@@ -184,9 +186,9 @@ data:
           action: replace
           target_label: kubernetes_name
 ```
-          
+```bash
 kubectl create -f config-map.yaml
-
+```
 #### créer prometheus-deployment.yaml: 
 
 ```yaml
@@ -238,10 +240,10 @@ spec:
           emptyDir: {}
 
 ```
-
+```bash
 kubectl create  -f prometheus-deployment.yaml 
-
-#### prometheus-service.yaml:
+```
+#### créer prometheus-service.yaml:
 
 ```yaml
 apiVersion: v1
@@ -261,17 +263,19 @@ spec:
       targetPort: 9090 
       nodePort: 30000
 ```
-
+```bash
 kubectl create -f prometheus-service.yaml --namespace=monitoring
-
+```
 ## 2. Setup Kube state metrics 
-
+```bash
 git clone https://github.com/devopscube/kube-state-metrics-configs.git
-
+```
+```bash
 kubectl apply -f kube-state-metrics-configs/
-
+```
+```bash
 kubectl get deployments kube-state-metrics -n kube-system
-
+```
 ### il faut ajouter ensuite : 
 ```yaml
 - job_name: 'kube-state-metrics'
@@ -280,9 +284,9 @@ kubectl get deployments kube-state-metrics -n kube-system
 ```
 
 ## 3. Set up grafana 
-
+```bash
 git clone https://github.com/bibinwilson/kubernetes-grafana.git
-
+```
 ### edit grafana-datasource-config.yaml
 ```yaml
 apiVersion: v1
@@ -306,9 +310,10 @@ data:
             }
         ]
     }
-``` 
+```
+```bash
 kubectl create -f grafana-datasource-config.yaml 
-
+```
 #### créer deployment.yaml:
 ```yaml
 apiVersion: apps/v1
@@ -317,7 +322,7 @@ metadata:
   name: grafana
   namespace: monitoring
 spec:
-  replicas: 1
+  rep<licas: 1
   selector:
     matchLabels:
       app: grafana
@@ -354,8 +359,9 @@ spec:
               defaultMode: 420
               name: grafana-datasources
 ```
+```bash
 kubectl create -f deployment.yaml 
-
+```
 #### créer service.yaml:
 ```yaml
 apiVersion: v1
@@ -375,10 +381,12 @@ spec:
       targetPort: 3000
       nodePort: 32000
 ```
+```bash
 kubectl create -f service.yaml
-
+```
+```bash
 kubectl port-forward -n monitoring <grafana-pod-name> 3000 &
-
+```
 User: admin
 Pass: admin
 
@@ -413,13 +421,15 @@ esConfig:
         roles: superuser
         authz_exception: true
 ```
+```bash
 helm repo add elastic https://helm.elastic.co
 helm install elasticsearch elastic/elasticsearch -f values.yaml
-
+```
 ## 5- Install Elasticsearch exporter 
+```bash
 clone https://github.com/prometheus-community/helm-charts/tree/main
 cd charts/prometheus-elasticsearch-exporter 
-
+```
 ### edit values.yaml :
 ```yaml
 change sslSkipVerify to true 
