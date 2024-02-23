@@ -391,6 +391,8 @@ kubectl port-forward -n monitoring <grafana-pod-name> 3000 &
 User: admin
 Pass: admin
 
+
+![](grafana-k8s.jpg)
 ## 4- install eslatic : 
 
 ### créer values.yaml 
@@ -444,6 +446,8 @@ the password: kubectl get secrets --namespace=default elasticsearch-master-crede
   static_configs:
   - targets: ['elasticsearch_exporter_machine_IP_address:9108']
 ```
+![](prometheus-targets.jpg)
+
 
 ### ajouter les alerts dans le configmap de prometheus 
 ```yaml
@@ -530,6 +534,10 @@ the password: kubectl get secrets --namespace=default elasticsearch-master-crede
     labels:
       severity: critical
 ```
+
+![](prometheus-alerts.jpg) 
+
+
 #### maintenant on ajoute les recording rules : 
 ```yaml
 groups:
@@ -564,8 +572,12 @@ groups:
     expr: sum by (cluster, instance, name) (
       100 * (elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}))
 ```
+![](prometheus-rules.jpg) 
+
 
 #### Dashboard Grafana
 Enfin on importe ce [dashboard](https://grafana.com/api/dashboards/14191/revisions/1/download) sur grafana pour voir les metrics. 
+
+![](grafana-final.jpg)
 
 
