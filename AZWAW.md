@@ -564,3 +564,8 @@ groups:
     expr: sum by (cluster, instance, name) (
       100 * (elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}))
 ```
+
+#### Dashboard Grafana
+Enfin on importe ce [dashboard](https://grafana.com/api/dashboards/14191/revisions/1/download) sur grafana pour voir les metrics. 
+
+
