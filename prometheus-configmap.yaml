@@ -1,0 +1,261 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-server-conf
+  labels:
+    name: prometheus-server-conf
+  namespace: monitoring
+data:
+  prometheus.rules: |-
+    groups:
+    - name: elasticsearch-alerts
+      rules:
+      - alert: ElasticsearchTooFewNodesRunning
+        expr: elasticsearch_cluster_health_number_of_nodes < 3
+        for: 5m
+        annotations:
+          description: "There are only {{ $value }} < 3 ElasticSearch nodes running"
+          summary: ElasticSearch running on less than 3 nodes
+        labels:
+          severity: critical
+      - alert: ElasticsearchHeapTooHigh
+        expr: elasticsearch_heap_utilization_percentage > 90
+        for: 15m
+        annotations:
+          description: The heap usage is over 90% for 15m
+          summary: "ElasticSearch node {{ $labels.name }} heap usage is high"
+        labels:
+          severity: critical
+      - alert: ElasticsearchClusterNotHealthy
+        expr: elasticsearch_red_cluster_status
+        for: 2m
+        annotations:
+          message: "Cluster {{ $labels.cluster }} health status has been RED for at least 2m. Cluster does not accept writes, shards may be missing or master node hasn't been elected yet."
+          summary: Cluster health status is RED
+        labels:
+          severity: critical
+      - alert: ElasticsearchClusterNotHealthy
+        expr: elasticsearch_yellow_cluster_status
+        for: 20m
+        annotations:
+          message: "Cluster {{ $labels.cluster }} health status has been YELLOW for at least 20m. Some shard replicas are not allocated."
+          summary: Cluster health status is YELLOW
+        labels:
+          severity: warning
+      - alert: ElasticsearchNodeDiskWatermarkReached
+        expr: elasticsearch_node_disk_watermark_reached > 85
+        for: 5m
+        annotations:
+          message: "Disk Low Watermark Reached at {{ $labels.node }} node in {{ $labels.cluster }} cluster. Shards can not be allocated to this node anymore. You should consider adding more disk to the node."
+          summary: "Disk Low Watermark Reached - disk saturation is {{ $value }}%"
+        labels:
+          severity: warning
+      - alert: ElasticsearchNodeDiskWatermarkReached
+        expr: elasticsearch_node_disk_watermark_reached > 90
+        for: 5m
+        annotations:
+          message: "Disk High Watermark Reached at {{ $labels.node }} node in {{ $labels.cluster }} cluster. Some shards will be re-allocated to different nodes if possible. Make sure more disk space is added to the node or drop old indices allocated to this node."
+          summary: "Disk High Watermark Reached - disk saturation is {{ $value }}%"
+        labels:
+          severity: critical
+      - alert: ElasticsearchJVMHeapUseHigh
+        expr: elasticsearch_heap_utilization_percentage > 75
+        for: 10m
+        annotations:
+          message: "JVM Heap usage on the node {{ $labels.node }} in {{ $labels.cluster }} cluster is {{ $value }}%."
+          summary: JVM Heap usage on the node is high
+        labels:
+          severity: critical
+      - alert: SystemCPUHigh
+        expr: elasticsearch_os_cpu_high > 90
+        for: 1m
+        annotations:
+          message: "System CPU usage on the node {{ $labels.node }} in {{ $labels.cluster }} cluster is {{ $value }}%"
+          summary: System CPU usage is high
+        labels:
+          severity: critical
+      - alert: ElasticsearchProcessCPUHigh
+        expr: elasticsearch_process_cpu_high > 90
+        for: 1m
+        annotations:
+          message: "ES process CPU usage on the node {{ $labels.node }} in {{ $labels.cluster }} cluster is {{ $value }}%"
+          summary: ES process CPU usage is high
+        labels:
+          severity: critical
+    - name: devopscube demo alert
+      rules:
+      - alert: High Pod Memory
+        expr: sum(container_memory_usage_bytes) > 1
+        for: 1m
+        labels:
+          severity: slack
+        annotations:
+          summary: High Memory Usage
+  prometheus.yml: |-
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    rule_files:
+      - /etc/prometheus/prometheus.rules
+      - /etc/prometheus/recording_rules.yml
+    alerting:
+      alertmanagers:
+      - scheme: http
+        static_configs:
+        - targets:
+          - "alertmanager.monitoring.svc:9093"
+    scrape_configs:
+      - job_name: elasticsearch
+        static_configs:
+        - targets: ['10.96.23.188:9108']
+      - job_name: kubernetes-services
+        scrape_interval: 15s
+        scrape_timeout: 10s
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace]
+          action: keep
+          regex: (.+)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)(?::\d+);(\d+)
+          replacement: $1:$2
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+        - role: endpoints
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_endpoints_name]
+          regex: 'node-exporter'
+          action: keep
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+      - job_name: 'kube-state-metrics'
+        static_configs:
+        - targets: ['kube-state-metrics.kube-system.svc.cluster.local:8080']
+      - job_name: 'kubernetes-cadvisor'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+      - job_name: 'kubernetes-service-endpoints'
+        kubernetes_sd_configs:
+        - role: endpoints
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+  recording_rules.yml: |-
+    groups:
+    - name: elasticsearch_rules
+      rules:
+      - record: elasticsearch_filesystem_data_free_percent
+        expr: 100 - elasticsearch_filesystem_data_used_percent
+      - record: elasticsearch_red_cluster_status
+        expr: sum by (cluster) (elasticsearch_cluster_health_status == 2)
+      - record: elasticsearch_yellow_cluster_status
+        expr: sum by (cluster) (elasticsearch_cluster_health_status == 1)
+      - record: elasticsearch_process_cpu_high
+        expr: sum by (cluster, instance, name) (elasticsearch_process_cpu_percent)
+      - record: elasticsearch_os_cpu_high
+        expr: sum by (cluster, instance, name) (elasticsearch_os_cpu_percent)
+      - record: elasticsearch_filesystem_data_used_percent
+        expr: sum by (cluster, instance, name) (
+          100 * (elasticsearch_filesystem_data_size_bytes - elasticsearch_filesystem_data_free_bytes)
+          / elasticsearch_filesystem_data_size_bytes)
+      - record: elasticsearch_node_disk_watermark_reached
+        expr: sum by (cluster, instance, name) (round(
+              (1 - (elasticsearch_filesystem_data_available_bytes / elasticsearch_filesystem_data_size_bytes)
+            ) * 100, 0.001))
+      - record: elasticsearch_heap_utilization_percentage
+        expr: sum by (cluster, instance, name) (
+          100 * (elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}))
